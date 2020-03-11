@@ -1,14 +1,16 @@
 import pymel.core as pm
 from shiboken2 import wrapInstance
 from maya import OpenMayaUI
-from PySide2 import QtWidgets, QtCore
+from PySide2 import QtWidgets, QtCore, QtGui
 import weakref
+import json
+import os
 
 
 def dock_window(dialog_class):
     try:
         pm.deleteUI(dialog_class.CONTROL_NAME)
-    except:
+    except RuntimeError:
         pass
 
     main_control = pm.workspaceControl(dialog_class.CONTROL_NAME, ttc=["AttributeEditor", -1], iw=300, mw=True,
@@ -27,7 +29,7 @@ def delete_instances():
         try:
             ins.setParent(None)
             ins.deleteLater()
-        except:
+        except RuntimeError:
             pass
 
         RiggingToolsUI.instances.remove(ins)
@@ -43,6 +45,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super(RiggingToolsUI, self).__init__(parent)
+        self.curveCreator = CurveCreator()
         delete_instances()
         self.__class__.instances.append(weakref.proxy(self))
         self.setWindowTitle('Rigging Tools')
@@ -50,16 +53,19 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.ui = parent
         self.mainLayout = parent.layout()
 
+        self.path = os.path.join(pm.internalVar(userAppDir=True), pm.about(v=True), "scripts/RiggingTools/Controls")
         self.build_ui()
 
     def build_ui(self):
         self.mainLayout.setContentsMargins(0, 0, 0, 0)
         self.tabWidget = QtWidgets.QTabWidget()
         self.tabWidget.setGeometry(QtCore.QRect(9, 9, 661, 551))
+        self.tabWidget.setTabPosition(QtWidgets.QTabWidget.West)
         self.mainLayout.addWidget(self.tabWidget)
 
         self.build_command_ui()
         self.build_control_ui()
+        self.load_curves()
 
         self.tabWidget.setCurrentIndex(1)
 
@@ -71,15 +77,116 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.ControlCreator = QtWidgets.QWidget()
         self.tabWidget.addTab(self.ControlCreator, "Control Creator")
         self.ccGrid = QtWidgets.QGridLayout(self.ControlCreator)
+        self.ccGrid.setContentsMargins(0, 0, 0, 0)
 
+        self.iconSize = 200
         self.ctrlListWidget = QtWidgets.QListWidget()
+        self.ctrlListWidget.setViewMode(QtWidgets.QListWidget.IconMode)
+        self.ctrlListWidget.setIconSize(QtCore.QSize(self.iconSize, self.iconSize))
+        self.ctrlListWidget.setResizeMode(QtWidgets.QListWidget.Adjust)
+        self.ctrlListWidget.installEventFilter(self)
         self.ccGrid.addWidget(self.ctrlListWidget, 0, 0, 1, 2)
 
-        self.importBtn = QtWidgets.QPushButton("OwO")
-        self.ccGrid.addWidget(self.importBtn, 1, 0, 1, 2)
+        self.importBtn = QtWidgets.QPushButton("Import")
+        self.importBtn.clicked.connect(lambda: self.curveCreator.load_curve("OwO"))
+        self.ccGrid.addWidget(self.importBtn, 1, 0, 1, 1)
+
+        self.saveBtn = QtWidgets.QPushButton("Save")
+        self.saveBtn.clicked.connect(lambda: self.curveCreator.save_curve("OwO"))
+        self.ccGrid.addWidget(self.saveBtn, 1, 1, 1, 1)
+
+    # noinspection PyMethodOverriding
+    def eventFilter(self, obj, event):
+        if event.type() == QtCore.QEvent.Wheel:
+            modifiers = QtWidgets.QApplication.keyboardModifiers()
+            if modifiers == QtCore.Qt.ControlModifier:
+                scroll = event.delta()/120
+                if scroll == 1:
+                    if self.iconSize < 400:
+                        self.iconSize += 10
+                else:
+                    if self.iconSize > 50:
+                        self.iconSize -= 10
+                print self.iconSize
+                self.ctrlListWidget.setIconSize(QtCore.QSize(self.iconSize, self.iconSize))
+
+    def load_curves(self):
+        for i in os.listdir(self.path):
+            if i.endswith(".json"):
+                item = QtWidgets.QListWidgetItem(i.replace(".json", ""))
+                with open(os.path.join(self.path, i), "r+") as f:
+                    info = json.loads(f.readlines()[-1])
+                ss = info["icon"]
+                icon = QtGui.QIcon(ss)
+                item.setIcon(icon)
+
+                self.ctrlListWidget.addItem(item)
 
     def run(self):
         return self
+
+
+class CurveCreator(object):
+
+    def __init__(self):
+        super(CurveCreator, self).__init__()
+        self.path = os.path.join(pm.internalVar(userAppDir=True), pm.about(v=True), "scripts/RiggingTools/Controls")
+
+    def save_curve(self, name):
+        with UndoStack("Save Curve"):
+            sel = pm.ls(sl=1)[0]
+            shapes = sel.getShapes()
+            icon = self.save_icon(name, sel)
+            with open("{}/{}.json".format(self.path, name), "a") as f:
+                f.truncate(0)
+                info = {}
+                for i, shape in enumerate(shapes):
+                    cvs = shape.getCVs()
+                    degree = shape.degree()
+                    form = shape.form()
+                    knots = shape.getKnots()
+                    cv_list = []
+                    for e in cvs:
+                        cv = [e.x, e.y, e.z]
+                        cv_list.append(cv)
+                        info["cv"] = cv_list
+                    info["knots"] = knots
+                    info["degree"] = degree
+                    if form.index == 1 or form.index == 2:
+                        per = False
+                    else:
+                        per = True
+                    info["form"] = per
+                    json.dump(info, f)
+                    f.write("\n")
+                info.clear()
+                info["icon"] = icon
+                json.dump(info, f)
+
+    def load_curve(self, name):
+        with UndoStack("Load Curve"):
+            crvs = []
+            with open("{}/{}.json".format(self.path, name), "r+") as f:
+                lines = f.readlines()
+                data = [json.loads(line) for line in lines[0:-1]]
+                for i in data:
+                    crvs.append(pm.curve(p=i["cv"], degree=i["degree"], per=i["form"], knot=i["knots"]).getShape())
+
+            for crv in crvs[1:]:
+                pm.parent(crv, crvs[0].getParent(), add=True, s=True)
+                pm.delete(crv.getParent())
+
+    def save_icon(self, name, curve):
+        pm.viewFit(curve)
+        pm.setAttr("defaultRenderGlobals.imageFormat", 8)
+
+        current_time = pm.currentTime(q=True)
+        path = "{}/{}.jpg".format(self.path, name)
+        pm.playblast(completeFilename=path, forceOverwrite=True, format='image',
+                     width=400, height=400, showOrnaments=False, startTime=current_time, endTime=current_time,
+                     viewer=False, p=100)
+        pm.viewSet(previousView=1)
+        return path
 
 
 class UndoStack(object):
