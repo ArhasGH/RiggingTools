@@ -86,6 +86,11 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.ctrlListWidget.setIconSize(QtCore.QSize(self.iconSize, self.iconSize))
         self.ctrlListWidget.setResizeMode(QtWidgets.QListWidget.Adjust)
         self.ctrlListWidget.installEventFilter(self)
+        self.ctrlListWidget.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+        deleteaction = QtWidgets.QAction("Delete", self)
+        deleteaction.triggered.connect(self.delete_control)
+        self.ctrlListWidget.addAction(deleteaction)
+
         self.font = QtGui.QFont()
         self.font.setCapitalization(QtGui.QFont.Capitalize)
         self.font.setPointSize(self.iconSize * .2)
@@ -120,9 +125,16 @@ class RiggingToolsUI(QtWidgets.QWidget):
             self.ctrlListWidget.setFont(font)
         return False
 
+    def delete_control(self):
+        icon = self.ctrlListWidget.currentItem().data(QtCore.Qt.UserRole)["icon"]
+        data = icon.replace(".jpg", ".json")
+        os.remove(icon)
+        os.remove(data)
+        self.ctrlListWidget.takeItem(self.ctrlListWidget.currentRow())
+
     def load_curves(self):
         self.ctrlListWidget.clear()
-        for i in os.listdir(self.path):
+        for i in sorted(os.listdir(self.path), key=lambda s: s.lower()):
             if i.endswith(".json"):
                 item = QtWidgets.QListWidgetItem(i.replace(".json", ""))
                 with open(os.path.join(self.path, i), "r+") as f:
@@ -147,7 +159,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
                 return
 
     def test(self):
-        pass
+        print "owo"
         # print self.ctrlListWidget.currentItem().data(QtCore.Qt.UserRole)["icon"]
 
     def run(self):
