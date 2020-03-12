@@ -1,6 +1,6 @@
 import pymel.core as pm
 from shiboken2 import wrapInstance
-from maya import OpenMayaUI
+from maya import OpenMayaUI, OpenMaya
 from PySide2 import QtWidgets, QtCore, QtGui
 import weakref
 import json
@@ -13,8 +13,8 @@ def dock_window(dialog_class):
     except RuntimeError:
         pass
 
-    main_control = pm.workspaceControl(dialog_class.CONTROL_NAME, ttc=["AttributeEditor", -1], iw=300, mw=True,
-                                       wp='preferred', label=dialog_class.DOCK_LABEL_NAME)
+    main_control = pm.workspaceControl(dialog_class.CONTROL_NAME, ttc=["AttributeEditor", -1], iw=300, mw=300,
+                                       wp='resizingfree', label=dialog_class.DOCK_LABEL_NAME)
 
     control_widget = OpenMayaUI.MQtUtil.findControl(dialog_class.CONTROL_NAME)
     control_wrap = wrapInstance(long(control_widget), QtWidgets.QWidget)
@@ -55,11 +55,11 @@ class RiggingToolsUI(QtWidgets.QWidget):
 
         self.path = os.path.join(pm.internalVar(userAppDir=True), pm.about(v=True), "scripts/RiggingTools/Controls")
         self.build_ui()
+        self.popup = QtWidgets.QInputDialog()
 
     def build_ui(self):
         self.mainLayout.setContentsMargins(0, 0, 0, 0)
         self.tabWidget = QtWidgets.QTabWidget()
-        self.tabWidget.setGeometry(QtCore.QRect(9, 9, 661, 551))
         self.tabWidget.setTabPosition(QtWidgets.QTabWidget.West)
         self.mainLayout.addWidget(self.tabWidget)
 
@@ -73,18 +73,23 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.Commands = QtWidgets.QWidget()
         self.tabWidget.addTab(self.Commands, "Commands")
 
+    # noinspection SpellCheckingInspection
     def build_control_ui(self):
         self.ControlCreator = QtWidgets.QWidget()
         self.tabWidget.addTab(self.ControlCreator, "Control Creator")
         self.ccGrid = QtWidgets.QGridLayout(self.ControlCreator)
-        self.ccGrid.setContentsMargins(0, 0, 0, 0)
+        margin = 8
+        self.ccGrid.setContentsMargins(margin, margin, margin, margin)
 
-        self.iconSize = 200
+        self.iconSize = 100
         self.ctrlListWidget = QtWidgets.QListWidget()
-        self.ctrlListWidget.setViewMode(QtWidgets.QListWidget.IconMode)
         self.ctrlListWidget.setIconSize(QtCore.QSize(self.iconSize, self.iconSize))
         self.ctrlListWidget.setResizeMode(QtWidgets.QListWidget.Adjust)
         self.ctrlListWidget.installEventFilter(self)
+        self.font = QtGui.QFont()
+        self.font.setCapitalization(QtGui.QFont.Capitalize)
+        self.font.setPointSize(self.iconSize * .2)
+        self.ctrlListWidget.setFont(self.font)
         self.ccGrid.addWidget(self.ctrlListWidget, 0, 0, 1, 2)
 
         self.importBtn = QtWidgets.QPushButton("Import")
@@ -95,20 +100,24 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.saveBtn.clicked.connect(self.save_curve)
         self.ccGrid.addWidget(self.saveBtn, 1, 1, 1, 1)
 
+        self.testbtn = QtWidgets.QPushButton("Test")
+        self.testbtn.clicked.connect(self.test)
+        self.ccGrid.addWidget(self.testbtn, 2, 0, 1, 2)
+
     # noinspection PyMethodOverriding
     def eventFilter(self, obj, event):
-        if event.type() == QtCore.QEvent.Wheel:
-            modifiers = QtWidgets.QApplication.keyboardModifiers()
-            if modifiers == QtCore.Qt.ControlModifier:
-                scroll = event.delta()/120
-                if scroll == 1:
-                    if self.iconSize < 400:
-                        self.iconSize += 10
-                else:
-                    if self.iconSize > 50:
-                        self.iconSize -= 10
-                print self.iconSize
-                self.ctrlListWidget.setIconSize(QtCore.QSize(self.iconSize, self.iconSize))
+        if event.type() == QtCore.QEvent.KeyPress:
+            if event.key() == QtCore.Qt.Key_Plus:
+                if self.iconSize < 400:
+                    self.iconSize += 50
+            elif event.key() == QtCore.Qt.Key_Minus:
+                if self.iconSize > 50:
+                    self.iconSize -= 50
+            self.ctrlListWidget.setIconSize(QtCore.QSize(self.iconSize, self.iconSize))
+            font = QtGui.QFont()
+            font.setPointSize(self.iconSize*.2)
+            font.setCapitalization(QtGui.QFont.Capitalize)
+            self.ctrlListWidget.setFont(font)
         return False
 
     def load_curves(self):
@@ -121,7 +130,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
                 ss = info["icon"]
                 icon = QtGui.QIcon(ss)
                 item.setIcon(icon)
-
+                item.setData(QtCore.Qt.UserRole, info)
                 self.ctrlListWidget.addItem(item)
 
     def create_curve(self):
@@ -129,9 +138,17 @@ class RiggingToolsUI(QtWidgets.QWidget):
 
     def save_curve(self):
         with UndoStack("Save Curve"):
-            sel = pm.ls(sl=1)[0]
-            self.curveCreator.save_curve(sel.name())
-            self.load_curves()
+            text, confirm = self.popup.getText(self, "Save Curve", "Name: ")
+            if confirm:
+                self.curveCreator.save_curve(text)
+                self.load_curves()
+            else:
+                OpenMaya.MGlobal.displayError("Save curve cancelled")
+                return
+
+    def test(self):
+        pass
+        # print self.ctrlListWidget.currentItem().data(QtCore.Qt.UserRole)["icon"]
 
     def run(self):
         return self
