@@ -88,11 +88,11 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.ccGrid.addWidget(self.ctrlListWidget, 0, 0, 1, 2)
 
         self.importBtn = QtWidgets.QPushButton("Import")
-        self.importBtn.clicked.connect(lambda: self.curveCreator.load_curve("OwO"))
+        self.importBtn.clicked.connect(self.create_curve)
         self.ccGrid.addWidget(self.importBtn, 1, 0, 1, 1)
 
         self.saveBtn = QtWidgets.QPushButton("Save")
-        self.saveBtn.clicked.connect(lambda: self.curveCreator.save_curve("OwO"))
+        self.saveBtn.clicked.connect(self.save_curve)
         self.ccGrid.addWidget(self.saveBtn, 1, 1, 1, 1)
 
     # noinspection PyMethodOverriding
@@ -109,18 +109,29 @@ class RiggingToolsUI(QtWidgets.QWidget):
                         self.iconSize -= 10
                 print self.iconSize
                 self.ctrlListWidget.setIconSize(QtCore.QSize(self.iconSize, self.iconSize))
+        return False
 
     def load_curves(self):
+        self.ctrlListWidget.clear()
         for i in os.listdir(self.path):
             if i.endswith(".json"):
                 item = QtWidgets.QListWidgetItem(i.replace(".json", ""))
                 with open(os.path.join(self.path, i), "r+") as f:
-                    info = json.loads(f.readlines()[-1])
+                    info = json.load(f)[-1]
                 ss = info["icon"]
                 icon = QtGui.QIcon(ss)
                 item.setIcon(icon)
 
                 self.ctrlListWidget.addItem(item)
+
+    def create_curve(self):
+        self.curveCreator.create_curve(self.ctrlListWidget.currentItem().text())
+
+    def save_curve(self):
+        with UndoStack("Save Curve"):
+            sel = pm.ls(sl=1)[0]
+            self.curveCreator.save_curve(sel.name())
+            self.load_curves()
 
     def run(self):
         return self
@@ -133,43 +144,42 @@ class CurveCreator(object):
         self.path = os.path.join(pm.internalVar(userAppDir=True), pm.about(v=True), "scripts/RiggingTools/Controls")
 
     def save_curve(self, name):
-        with UndoStack("Save Curve"):
-            sel = pm.ls(sl=1)[0]
-            shapes = sel.getShapes()
-            icon = self.save_icon(name, sel)
-            with open("{}/{}.json".format(self.path, name), "a") as f:
-                f.truncate(0)
-                info = {}
-                for i, shape in enumerate(shapes):
-                    cvs = shape.getCVs()
-                    degree = shape.degree()
-                    form = shape.form()
-                    knots = shape.getKnots()
-                    cv_list = []
-                    for e in cvs:
-                        cv = [e.x, e.y, e.z]
-                        cv_list.append(cv)
-                        info["cv"] = cv_list
-                    info["knots"] = knots
-                    info["degree"] = degree
-                    if form.index == 1 or form.index == 2:
-                        per = False
-                    else:
-                        per = True
-                    info["form"] = per
-                    json.dump(info, f)
-                    f.write("\n")
-                info.clear()
-                info["icon"] = icon
-                json.dump(info, f)
+        sel = pm.ls(sl=1)[0]
+        shapes = sel.getShapes()
+        icon = self.save_icon(name, sel)
+        with open("{}/{}.json".format(self.path, name), "w+") as f:
+            dump_list = []
+            info = {}
+            for i, shape in enumerate(shapes):
+                cvs = shape.getCVs()
+                degree = shape.degree()
+                form = shape.form()
+                knots = shape.getKnots()
+                cv_list = []
+                for e in cvs:
+                    cv = [e.x, e.y, e.z]
+                    cv_list.append(cv)
+                    info["cv"] = cv_list
+                info["knots"] = knots
+                info["degree"] = degree
+                if form.index == 1 or form.index == 2:
+                    per = False
+                else:
+                    per = True
+                info["form"] = per
+                dump_list.append(dict(info))
+            info.clear()
+            info["icon"] = icon
+            dump_list.append(info)
+            print dump_list
+            json.dump(dump_list, f, indent=4)
 
-    def load_curve(self, name):
+    def create_curve(self, name):
         with UndoStack("Load Curve"):
             crvs = []
             with open("{}/{}.json".format(self.path, name), "r+") as f:
-                lines = f.readlines()
-                data = [json.loads(line) for line in lines[0:-1]]
-                for i in data:
+                data_list = json.load(f)
+                for i in data_list[0:-1]:
                     crvs.append(pm.curve(p=i["cv"], degree=i["degree"], per=i["form"], knot=i["knots"]).getShape())
 
             for crv in crvs[1:]:
