@@ -9,6 +9,11 @@ import RiggingTools
 import UndoStack
 
 
+def check_curves_directory(path):
+    if not os.path.isdir(path):
+        os.mkdir(path)
+
+
 def dock_window(dialog_class):
     try:
         pm.deleteUI(dialog_class.CONTROL_NAME)
@@ -59,6 +64,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.iconSize = self.ctrlListWidget.iconSize
 
         self.path = os.path.join(pm.internalVar(userAppDir=True), pm.about(v=True), "scripts/RiggingTools/Controls")
+        check_curves_directory(self.path)
         self.build_ui()
         self.popup = QtWidgets.QInputDialog()
 
