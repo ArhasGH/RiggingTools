@@ -1,10 +1,12 @@
 import pymel.core as pm
-from shiboken2 import wrapInstance
 from maya import OpenMayaUI, OpenMaya
 from PySide2 import QtWidgets, QtCore, QtGui
+from shiboken2 import wrapInstance
+import os
 import weakref
 import json
-import os
+import RiggingTools
+import UndoStack
 
 
 def dock_window(dialog_class):
@@ -45,7 +47,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super(RiggingToolsUI, self).__init__(parent)
-        self.curveCreator = CurveCreator()
+        self.curveCreator = RiggingTools.CurveCreator()
         delete_instances()
         self.__class__.instances.append(weakref.proxy(self))
         self.setWindowTitle('Rigging Tools')
@@ -97,22 +99,6 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.testbtn.clicked.connect(self.test)
         self.ccGrid.addWidget(self.testbtn, 2, 0, 1, 2)
 
-    # noinspection PyMethodOverriding
-    def eventFilter(self, obj, event):
-        if event.type() == QtCore.QEvent.KeyPress:
-            if event.key() == QtCore.Qt.Key_Plus:
-                if self.iconSize < 400:
-                    self.iconSize += 50
-            elif event.key() == QtCore.Qt.Key_Minus:
-                if self.iconSize > 50:
-                    self.iconSize -= 50
-            self.ctrlListWidget.setIconSize(QtCore.QSize(self.iconSize, self.iconSize))
-            font = QtGui.QFont()
-            font.setPointSize(self.iconSize*.2)
-            font.setCapitalization(QtGui.QFont.Capitalize)
-            self.ctrlListWidget.setFont(font)
-        return False
-
     def open_menu(self, position):
         pos = self.ctrlListWidget.mapFromGlobal(QtGui.QCursor.pos())
         if not self.ctrlListWidget.indexAt(pos).isValid():
@@ -150,7 +136,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.curveCreator.create_curve(self.ctrlListWidget.currentItem().text())
 
     def save_curve(self):
-        with UndoStack("Save Curve"):
+        with UndoStack.UndoStack("Save Curve"):
             try:
                 pm.ls(sl=1)[0].getShape()
             except AttributeError:
@@ -212,79 +198,22 @@ class CtrlListWidget(QtWidgets.QListWidget):
         os.remove(data)
         self.takeItem(self.currentRow())
 
-
-class CurveCreator(object):
-
-    def __init__(self):
-        super(CurveCreator, self).__init__()
-        self.path = os.path.join(pm.internalVar(userAppDir=True), pm.about(v=True), "scripts/RiggingTools/Controls")
-
-    def save_curve(self, name):
-        sel = pm.ls(sl=1)[0]
-        shapes = sel.getShapes()
-        icon = self.save_icon(name, sel)
-        with open("{}/{}.json".format(self.path, name), "w+") as f:
-            dump_list = []
-            info = {}
-            for i, shape in enumerate(shapes):
-                cvs = shape.getCVs()
-                degree = shape.degree()
-                form = shape.form()
-                knots = shape.getKnots()
-                cv_list = []
-                for e in cvs:
-                    cv = [e.x, e.y, e.z]
-                    cv_list.append(cv)
-                    info["cv"] = cv_list
-                info["knots"] = knots
-                info["degree"] = degree
-                if form.index == 1 or form.index == 2:
-                    per = False
-                else:
-                    per = True
-                info["form"] = per
-                dump_list.append(dict(info))
-            info.clear()
-            info["icon"] = icon
-            dump_list.append(info)
-            print dump_list
-            json.dump(dump_list, f, indent=4)
-
-    def create_curve(self, name):
-        with UndoStack("Load Curve"):
-            crvs = []
-            with open("{}/{}.json".format(self.path, name), "r+") as f:
-                data_list = json.load(f)
-                for i in data_list[0:-1]:
-                    crvs.append(pm.curve(p=i["cv"], degree=i["degree"], per=i["form"], knot=i["knots"]).getShape())
-
-            for crv in crvs[1:]:
-                pm.parent(crv, crvs[0].getParent(), add=True, s=True)
-                pm.delete(crv.getParent())
-
-    def save_icon(self, name, curve):
-        pm.viewFit(curve)
-        pm.setAttr("defaultRenderGlobals.imageFormat", 8)
-
-        current_time = pm.currentTime(q=True)
-        path = "{}/{}.jpg".format(self.path, name)
-        pm.playblast(completeFilename=path, forceOverwrite=True, format='image',
-                     width=400, height=400, showOrnaments=False, startTime=current_time, endTime=current_time,
-                     viewer=False, p=100)
-        pm.viewSet(previousView=1)
-        return path
-
-
-class UndoStack(object):
-
-    def __init__(self, name=""):
-        self.name = name
-
-    def __enter__(self):
-        pm.undoInfo(openChunk=True, infinity=True, cn=self.name)
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pm.undoInfo(closeChunk=True)
+    # noinspection PyMethodOverriding
+    def eventFilter(self, obj, event):
+        if event.type() == QtCore.QEvent.KeyPress:
+            if event.key() == QtCore.Qt.Key_Plus:
+                if self.iconSize < 400:
+                    self.iconSize += 50
+            elif event.key() == QtCore.Qt.Key_Minus:
+                if self.iconSize > 50:
+                    self.iconSize -= 50
+            self.setIconSize(
+                QtCore.QSize(self.iconSize, self.iconSize))
+            font = QtGui.QFont()
+            font.setPointSize(self.iconSize * .2)
+            font.setCapitalization(QtGui.QFont.Capitalize)
+            self.setFont(font)
+        return False
 
 
 def show_ui():
