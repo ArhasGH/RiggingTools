@@ -53,6 +53,9 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.ui = parent
         self.mainLayout = parent.layout()
 
+        self.ctrlListWidget = CtrlListWidget()
+        self.iconSize = self.ctrlListWidget.iconSize
+
         self.path = os.path.join(pm.internalVar(userAppDir=True), pm.about(v=True), "scripts/RiggingTools/Controls")
         self.build_ui()
         self.popup = QtWidgets.QInputDialog()
@@ -80,21 +83,6 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.ccGrid = QtWidgets.QGridLayout(self.ControlCreator)
         margin = 8
         self.ccGrid.setContentsMargins(margin, margin, margin, margin)
-
-        self.iconSize = 100
-        self.ctrlListWidget = QtWidgets.QListWidget()
-        self.ctrlListWidget.setIconSize(QtCore.QSize(self.iconSize, self.iconSize))
-        self.ctrlListWidget.setResizeMode(QtWidgets.QListWidget.Adjust)
-        self.ctrlListWidget.installEventFilter(self)
-        self.ctrlListWidget.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
-        deleteaction = QtWidgets.QAction("Delete", self)
-        deleteaction.triggered.connect(self.delete_control)
-        self.ctrlListWidget.addAction(deleteaction)
-
-        self.font = QtGui.QFont()
-        self.font.setCapitalization(QtGui.QFont.Capitalize)
-        self.font.setPointSize(self.iconSize * .2)
-        self.ctrlListWidget.setFont(self.font)
         self.ccGrid.addWidget(self.ctrlListWidget, 0, 0, 1, 2)
 
         self.importBtn = QtWidgets.QPushButton("Import")
@@ -125,6 +113,16 @@ class RiggingToolsUI(QtWidgets.QWidget):
             self.ctrlListWidget.setFont(font)
         return False
 
+    def open_menu(self, position):
+        pos = self.ctrlListWidget.mapFromGlobal(QtGui.QCursor.pos())
+        if not self.ctrlListWidget.indexAt(pos).isValid():
+            return
+        menu = QtWidgets.QMenu()
+        delete_action = menu.addAction("Delete")
+        action = menu.exec_(self.ctrlListWidget.mapToGlobal(position))
+        if action == delete_action:
+            self.delete_control()
+
     def delete_control(self):
         icon = self.ctrlListWidget.currentItem().data(QtCore.Qt.UserRole)["icon"]
         data = icon.replace(".jpg", ".json")
@@ -146,16 +144,30 @@ class RiggingToolsUI(QtWidgets.QWidget):
                 self.ctrlListWidget.addItem(item)
 
     def create_curve(self):
+        if not self.ctrlListWidget.currentItem():
+            OpenMaya.MGlobal.displayError("No Curves Found")
+            return
         self.curveCreator.create_curve(self.ctrlListWidget.currentItem().text())
 
     def save_curve(self):
         with UndoStack("Save Curve"):
+            try:
+                pm.ls(sl=1)[0].getShape()
+            except AttributeError:
+                OpenMaya.MGlobal.displayError("Selected object not of type nurbsCurve")
+                return
+            if not pm.ls(sl=1):
+                OpenMaya.MGlobal.displayError("Nothing selected")
+                return
+            elif pm.ls(sl=1)[0].getShape().type() != "nurbsCurve":
+                OpenMaya.MGlobal.displayError("Selected object not of type nurbsCurve")
+                return
             text, confirm = self.popup.getText(self, "Save Curve", "Name: ")
             if confirm:
                 self.curveCreator.save_curve(text)
                 self.load_curves()
             else:
-                OpenMaya.MGlobal.displayError("Save curve cancelled")
+                OpenMaya.MGlobal.displayWarning("Save curve cancelled")
                 return
 
     def test(self):
@@ -164,6 +176,41 @@ class RiggingToolsUI(QtWidgets.QWidget):
 
     def run(self):
         return self
+
+
+class CtrlListWidget(QtWidgets.QListWidget):
+
+    def __init__(self, parent=None):
+        QtWidgets.QListWidget.__init__(self, parent)
+
+        self.iconSize = 100
+        self.setIconSize(QtCore.QSize(self.iconSize, self.iconSize))
+        self.setResizeMode(QtWidgets.QListWidget.Adjust)
+        self.installEventFilter(self)
+        self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.open_menu)
+
+        self.font = QtGui.QFont()
+        self.font.setCapitalization(QtGui.QFont.Capitalize)
+        self.font.setPointSize(self.iconSize * .2)
+        self.setFont(self.font)
+
+    def open_menu(self, position):
+        pos = self.mapFromGlobal(QtGui.QCursor.pos())
+        if not self.indexAt(pos).isValid():
+            return
+        menu = QtWidgets.QMenu()
+        delete_action = menu.addAction("Delete")
+        action = menu.exec_(self.mapToGlobal(position))
+        if action == delete_action:
+            self.delete_control()
+
+    def delete_control(self):
+        icon = self.currentItem().data(QtCore.Qt.UserRole)["icon"]
+        data = icon.replace(".jpg", ".json")
+        os.remove(icon)
+        os.remove(data)
+        self.takeItem(self.currentRow())
 
 
 class CurveCreator(object):
