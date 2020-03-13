@@ -25,3 +25,5 @@ Current State:
     Test Btn is well, just for testing smth, shouldn't do anything interesting for now  
     Commands tab is doing absolutely nothing as of right now.  
     Docking should work, also try closing, reopening and scaling the window.
+    Names for the created control should work as well. Should also be self explanatory
+    You can zoom by pressing +/- while the list of Controls is in focus, don't ask why, I was just bored

@@ -41,17 +41,22 @@ class CurveCreator(object):
             print dump_list
             json.dump(dump_list, f, indent=4)
 
-    def create_curve(self, name):
+    def create_curve(self, control, name):
         with UndoStack.UndoStack("Load Curve"):
             crvs = []
-            with open("{}/{}.json".format(self.path, name), "r+") as f:
+            with open("{}/{}.json".format(self.path, control), "r+") as f:
                 data_list = json.load(f)
                 for i in data_list[0:-1]:
                     crvs.append(pm.curve(p=i["cv"], degree=i["degree"], per=i["form"], knot=i["knots"]).getShape())
-
-            for crv in crvs[1:]:
-                pm.parent(crv, crvs[0].getParent(), add=True, s=True)
-                pm.delete(crv.getParent())
+            if len(crvs) > 1:
+                for crv in crvs[1:]:
+                    pm.parent(crv, crvs[0].getParent(), add=True, s=True)
+                    if name:
+                        pm.rename(crvs[0].getParent(), name)
+                    pm.delete(crv.getParent())
+            else:
+                if name:
+                    pm.rename(crvs[0].getParent(), name)
 
     def save_icon(self, name, curve):
         pm.viewFit(curve)

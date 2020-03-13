@@ -7,6 +7,7 @@ import weakref
 import json
 import RiggingTools
 import UndoStack
+reload(RiggingTools)
 
 
 def check_curves_directory(path):
@@ -91,19 +92,24 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.ccGrid = QtWidgets.QGridLayout(self.ControlCreator)
         margin = 8
         self.ccGrid.setContentsMargins(margin, margin, margin, margin)
-        self.ccGrid.addWidget(self.ctrlListWidget, 0, 0, 1, 2)
 
-        self.importBtn = QtWidgets.QPushButton("Import")
+        self.ctrlName = QtWidgets.QLineEdit()
+        self.ctrlName.setPlaceholderText("Control Name")
+        self.ctrlName.setAlignment(QtCore.Qt.AlignHCenter)
+        self.ccGrid.addWidget(self.ctrlName, 0, 0, 1, 2)
+        self.ccGrid.addWidget(self.ctrlListWidget, 1, 0, 1, 2)
+
+        self.importBtn = QtWidgets.QPushButton("Create")
         self.importBtn.clicked.connect(self.create_curve)
-        self.ccGrid.addWidget(self.importBtn, 1, 0, 1, 1)
+        self.ccGrid.addWidget(self.importBtn, 2, 0, 1, 1)
 
         self.saveBtn = QtWidgets.QPushButton("Save")
         self.saveBtn.clicked.connect(self.save_curve)
-        self.ccGrid.addWidget(self.saveBtn, 1, 1, 1, 1)
+        self.ccGrid.addWidget(self.saveBtn, 2, 1, 1, 1)
 
         self.testbtn = QtWidgets.QPushButton("Test")
         self.testbtn.clicked.connect(self.test)
-        self.ccGrid.addWidget(self.testbtn, 2, 0, 1, 2)
+        self.ccGrid.addWidget(self.testbtn, 3, 0, 1, 2)
 
     def open_menu(self, position):
         pos = self.ctrlListWidget.mapFromGlobal(QtGui.QCursor.pos())
@@ -140,25 +146,25 @@ class RiggingToolsUI(QtWidgets.QWidget):
                 item.setData(QtCore.Qt.UserRole, info)
                 self.ctrlListWidget.addItem(item)
         if not data_found:
-            OpenMaya.MGlobal.displayError("No data found")
+            OpenMaya.MGlobal.displayWarning("No data found")
 
     def create_curve(self):
         if not self.ctrlListWidget.currentItem():
-            OpenMaya.MGlobal.displayError("No Curves Found")
+            OpenMaya.MGlobal.displayError("No curve selected")
             return
-        self.curveCreator.create_curve(self.ctrlListWidget.currentItem().text())
+        self.curveCreator.create_curve(control=self.ctrlListWidget.currentItem().text(), name=self.ctrlName.text())
 
     def save_curve(self):
         with UndoStack.UndoStack("Save Curve"):
+            if not pm.ls(sl=1):
+                OpenMaya.MGlobal.displayError("Nothing selected")
+                return
             try:
                 pm.ls(sl=1)[0].getShape()
             except AttributeError:
                 OpenMaya.MGlobal.displayError("Selected object not of type nurbsCurve")
                 return
-            if not pm.ls(sl=1):
-                OpenMaya.MGlobal.displayError("Nothing selected")
-                return
-            elif pm.ls(sl=1)[0].getShape().type() != "nurbsCurve":
+            if pm.ls(sl=1)[0].getShape().type() != "nurbsCurve":
                 OpenMaya.MGlobal.displayError("Selected object not of type nurbsCurve")
                 return
             text, confirm = self.popup.getText(self, "Save Curve", "Name: ")
