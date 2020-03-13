@@ -65,6 +65,10 @@ class CurveCreator(object):
                 pm.group(curve)
 
     def save_icon(self, name, curve):
+        old_width = []
+        for i in pm.ls(sl=1)[0].getShapes():
+            old_width.append(i.lineWidth.get())
+            i.lineWidth.set(5)
         pm.viewFit(curve)
         pm.setAttr("defaultRenderGlobals.imageFormat", 8)
 
@@ -74,4 +78,6 @@ class CurveCreator(object):
                      width=400, height=400, showOrnaments=False, startTime=current_time, endTime=current_time,
                      viewer=False, p=100)
         pm.viewSet(previousView=1)
+        for i, n in enumerate(pm.ls(sl=1)[0].getShapes()):
+            n.lineWidth.set(old_width[i])
         return path
