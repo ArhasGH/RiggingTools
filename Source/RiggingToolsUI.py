@@ -47,8 +47,8 @@ def delete_instances():
 class RiggingToolsUI(QtWidgets.QWidget):
 
     instances = list()
-    CONTROL_NAME = 'Rigging Tools'
-    DOCK_LABEL_NAME = 'Rigging Tools'
+    CONTROL_NAME = 'RiggingTools'
+    DOCK_LABEL_NAME = 'RiggingTools'
 
     def __init__(self, parent=None):
         super(RiggingToolsUI, self).__init__(parent)
@@ -124,16 +124,23 @@ class RiggingToolsUI(QtWidgets.QWidget):
 
     def load_curves(self):
         self.ctrlListWidget.clear()
+        data_found = False
         for i in sorted(os.listdir(self.path), key=lambda s: s.lower()):
             if i.endswith(".json"):
                 item = QtWidgets.QListWidgetItem(i.replace(".json", ""))
                 with open(os.path.join(self.path, i), "r+") as f:
-                    info = json.load(f)[-1]
+                    try:
+                        info = json.load(f)[-1]
+                    except ValueError:
+                        continue
+                data_found = True
                 ss = info["icon"]
                 icon = QtGui.QIcon(ss)
                 item.setIcon(icon)
                 item.setData(QtCore.Qt.UserRole, info)
                 self.ctrlListWidget.addItem(item)
+        if not data_found:
+            OpenMaya.MGlobal.displayError("No data found")
 
     def create_curve(self):
         if not self.ctrlListWidget.currentItem():
@@ -162,6 +169,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
                 OpenMaya.MGlobal.displayWarning("Save curve cancelled")
                 return
 
+    # noinspection PyMethodMayBeStatic
     def test(self):
         print "owo"
         # print self.ctrlListWidget.currentItem().data(QtCore.Qt.UserRole)["icon"]
