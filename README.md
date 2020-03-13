@@ -20,10 +20,11 @@ Current State:
 
     Importing and Exporting nurbs curves;  
     Create a Nurbs Curve and click Save.  
-    To load, simply click on the curve in the list and hit Import.  
-    To delete a stored curve right click and hit delete.  
-    Test Btn is well, just for testing smth, shouldn't do anything interesting for now  
-    Commands tab is doing absolutely nothing as of right now.  
-    Docking should work, also try closing, reopening and scaling the window.
+    To load, simply click on the curve in the list and hit Create.  
     Names for the created control should work as well. Should also be self explanatory
+    You can set the mode via the dropdown menu, to automatically have the created curved be grouped
+    To delete a stored curve right click and hit delete.  
+    To rename, right click and hit rename, a name has to be provided.
+    Commands and Options tab are doing absolutely nothing as of right now.  
+    Docking should work, also try closing, reopening and scaling the window.
     You can zoom by pressing +/- while the list of Controls is in focus, don't ask why, I was just bored

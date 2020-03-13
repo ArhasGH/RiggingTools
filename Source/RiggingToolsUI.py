@@ -61,10 +61,10 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.ui = parent
         self.mainLayout = parent.layout()
 
-        self.ctrlListWidget = CtrlListWidget()
+        self.path = os.path.join(pm.internalVar(userAppDir=True), pm.about(v=True), "scripts/RiggingTools/Controls")
+        self.ctrlListWidget = CtrlListWidget(path=self.path)
         self.iconSize = self.ctrlListWidget.iconSize
 
-        self.path = os.path.join(pm.internalVar(userAppDir=True), pm.about(v=True), "scripts/RiggingTools/Controls")
         check_curves_directory(self.path)
         self.build_ui()
         self.popup = QtWidgets.QInputDialog()
@@ -77,9 +77,14 @@ class RiggingToolsUI(QtWidgets.QWidget):
 
         self.build_command_ui()
         self.build_control_ui()
-        self.load_curves()
+        self.build_options_ui()
+        self.ctrlListWidget.load_curves()
 
         self.tabWidget.setCurrentIndex(1)
+
+    def build_options_ui(self):
+        self.Options = QtWidgets.QWidget()
+        self.tabWidget.addTab(self.Options, "Options")
 
     def build_command_ui(self):
         self.Commands = QtWidgets.QWidget()
@@ -96,63 +101,29 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.ctrlName = QtWidgets.QLineEdit()
         self.ctrlName.setPlaceholderText("Control Name")
         self.ctrlName.setAlignment(QtCore.Qt.AlignHCenter)
-        self.ccGrid.addWidget(self.ctrlName, 0, 0, 1, 2)
-        self.ccGrid.addWidget(self.ctrlListWidget, 1, 0, 1, 2)
+        self.ccGrid.addWidget(self.ctrlName, 0, 0, 1, 3)
+
+        self.modeBox = QtWidgets.QComboBox()
+        self.modeBox.addItem("Bare Curve")
+        self.modeBox.addItem("Grouped")
+        self.ccGrid.addWidget(self.modeBox, 0, 3, 1, 1)
+
+        self.ccGrid.addWidget(self.ctrlListWidget, 1, 0, 1, 4)
 
         self.importBtn = QtWidgets.QPushButton("Create")
         self.importBtn.clicked.connect(self.create_curve)
-        self.ccGrid.addWidget(self.importBtn, 2, 0, 1, 1)
+        self.ccGrid.addWidget(self.importBtn, 2, 0, 1, 2)
 
         self.saveBtn = QtWidgets.QPushButton("Save")
         self.saveBtn.clicked.connect(self.save_curve)
-        self.ccGrid.addWidget(self.saveBtn, 2, 1, 1, 1)
-
-        self.testbtn = QtWidgets.QPushButton("Test")
-        self.testbtn.clicked.connect(self.test)
-        self.ccGrid.addWidget(self.testbtn, 3, 0, 1, 2)
-
-    def open_menu(self, position):
-        pos = self.ctrlListWidget.mapFromGlobal(QtGui.QCursor.pos())
-        if not self.ctrlListWidget.indexAt(pos).isValid():
-            return
-        menu = QtWidgets.QMenu()
-        delete_action = menu.addAction("Delete")
-        action = menu.exec_(self.ctrlListWidget.mapToGlobal(position))
-        if action == delete_action:
-            self.delete_control()
-
-    def delete_control(self):
-        icon = self.ctrlListWidget.currentItem().data(QtCore.Qt.UserRole)["icon"]
-        data = icon.replace(".jpg", ".json")
-        os.remove(icon)
-        os.remove(data)
-        self.ctrlListWidget.takeItem(self.ctrlListWidget.currentRow())
-
-    def load_curves(self):
-        self.ctrlListWidget.clear()
-        data_found = False
-        for i in sorted(os.listdir(self.path), key=lambda s: s.lower()):
-            if i.endswith(".json"):
-                item = QtWidgets.QListWidgetItem(i.replace(".json", ""))
-                with open(os.path.join(self.path, i), "r+") as f:
-                    try:
-                        info = json.load(f)[-1]
-                    except ValueError:
-                        continue
-                data_found = True
-                ss = info["icon"]
-                icon = QtGui.QIcon(ss)
-                item.setIcon(icon)
-                item.setData(QtCore.Qt.UserRole, info)
-                self.ctrlListWidget.addItem(item)
-        if not data_found:
-            OpenMaya.MGlobal.displayWarning("No data found")
+        self.ccGrid.addWidget(self.saveBtn, 2, 2, 1, 2)
 
     def create_curve(self):
         if not self.ctrlListWidget.currentItem():
             OpenMaya.MGlobal.displayError("No curve selected")
             return
-        self.curveCreator.create_curve(control=self.ctrlListWidget.currentItem().text(), name=self.ctrlName.text())
+        self.curveCreator.create_curve(self.ctrlListWidget.currentItem().text(), self.ctrlName.text(),
+                                       self.modeBox.currentIndex())
 
     def save_curve(self):
         with UndoStack.UndoStack("Save Curve"):
@@ -168,17 +139,15 @@ class RiggingToolsUI(QtWidgets.QWidget):
                 OpenMaya.MGlobal.displayError("Selected object not of type nurbsCurve")
                 return
             text, confirm = self.popup.getText(self, "Save Curve", "Name: ")
-            if confirm:
-                self.curveCreator.save_curve(text)
-                self.load_curves()
-            else:
+            if not confirm:
                 OpenMaya.MGlobal.displayWarning("Save curve cancelled")
                 return
-
-    # noinspection PyMethodMayBeStatic
-    def test(self):
-        print "owo"
-        # print self.ctrlListWidget.currentItem().data(QtCore.Qt.UserRole)["icon"]
+            elif not text:
+                OpenMaya.MGlobal.displayError("You have to enter a name")
+                return
+            else:
+                self.curveCreator.save_curve(text)
+                self.ctrlListWidget.load_curves()
 
     def run(self):
         return self
@@ -186,7 +155,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
 
 class CtrlListWidget(QtWidgets.QListWidget):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, path=None):
         QtWidgets.QListWidget.__init__(self, parent)
 
         self.iconSize = 100
@@ -201,15 +170,65 @@ class CtrlListWidget(QtWidgets.QListWidget):
         self.font.setPointSize(self.iconSize * .2)
         self.setFont(self.font)
 
+        self.popup = QtWidgets.QInputDialog()
+
+        self.path = path
+
     def open_menu(self, position):
         pos = self.mapFromGlobal(QtGui.QCursor.pos())
         if not self.indexAt(pos).isValid():
             return
         menu = QtWidgets.QMenu()
+        rename_action = menu.addAction("Rename")
         delete_action = menu.addAction("Delete")
         action = menu.exec_(self.mapToGlobal(position))
         if action == delete_action:
             self.delete_control()
+        if action == rename_action:
+            self.rename_control()
+
+    # Very Messy, rewrite later
+    def rename_control(self):
+        data = self.currentItem().data(QtCore.Qt.UserRole)
+        new_name, confirm = self.popup.getText(self, "Rename", "New Name: ")
+        if not confirm:
+            return
+        elif not new_name:
+            OpenMaya.MGlobal.displayError("Enter a new name!")
+            return
+        icon = data["icon"]
+        old_name = os.path.splitext(data["name"])[0]
+        new_icon = icon.replace(old_name, new_name)
+        new_json = new_icon.replace(".jpg", ".json")
+        os.rename(icon, new_icon)
+        os.rename(icon.replace(".jpg", ".json"), new_json)
+        with open(new_json, "r+") as f:
+            ss = json.load(f)
+            ss[-1]["icon"] = new_icon
+        with open(new_json, "w+") as f:
+            json.dump(ss, f, indent=4)
+        self.load_curves()
+
+    def load_curves(self):
+        self.clear()
+        data_found = False
+        for i in sorted(os.listdir(self.path), key=lambda s: s.lower()):
+            if i.endswith(".json"):
+                item = QtWidgets.QListWidgetItem(i.replace(".json", ""))
+                with open(os.path.join(self.path, i), "r+") as f:
+                    try:
+                        info = json.load(f)[-1]
+                    except ValueError:
+                        continue
+                data_found = True
+                info["name"] = i
+                ss = info["icon"]
+                icon = QtGui.QIcon(ss)
+                item.setIcon(icon)
+                item.setData(QtCore.Qt.UserRole, info)
+                self.addItem(item)
+        if not data_found:
+            OpenMaya.MGlobal.displayWarning("No data found")
 
     def delete_control(self):
         icon = self.currentItem().data(QtCore.Qt.UserRole)["icon"]

@@ -41,7 +41,7 @@ class CurveCreator(object):
             print dump_list
             json.dump(dump_list, f, indent=4)
 
-    def create_curve(self, control, name):
+    def create_curve(self, control, name, mode):
         with UndoStack.UndoStack("Load Curve"):
             crvs = []
             with open("{}/{}.json".format(self.path, control), "r+") as f:
@@ -52,11 +52,17 @@ class CurveCreator(object):
                 for crv in crvs[1:]:
                     pm.parent(crv, crvs[0].getParent(), add=True, s=True)
                     if name:
-                        pm.rename(crvs[0].getParent(), name)
+                        curve = pm.rename(crvs[0].getParent(), name)
+                    else:
+                        curve = crvs[0].getParent()
                     pm.delete(crv.getParent())
             else:
                 if name:
-                    pm.rename(crvs[0].getParent(), name)
+                    curve = pm.rename(crvs[0].getParent(), name)
+                else:
+                    curve = crvs[0].getParent()
+            if mode == 1:
+                pm.group(curve)
 
     def save_icon(self, name, curve):
         pm.viewFit(curve)
