@@ -4,8 +4,7 @@ Create a new folder called `RiggingTools` in your maya scripts folder for your c
 Put the `Script` folder you downloaded in there so you end up with this
 `C:\Users\USER\Documents\maya\2020\scripts\RiggingTools\Scripts`
 
-Then put the `__init__.py` file in the same folder. You can also just create it yourself, 
-it's empty but needed for python
+Then put the `__init__.py` and `config.ini` in the same folder.
 
 The script *should* be compatible with maya 2017+
 
@@ -25,6 +24,8 @@ Current State:
     You can set the mode via the dropdown menu, to automatically have the created curved be grouped
     To delete a stored curve right click and hit delete.  
     To rename, right click and hit rename, a name has to be provided.
-    Commands and Options tab are doing absolutely nothing as of right now.  
+    Commands tab is doing absolutely nothing as of right now.  
     Docking should work, also try closing, reopening and scaling the window.
     You can zoom by pressing +/- while the list of Controls is in focus, don't ask why, I was just bored
+    Some suffix options are available in the options tab, but you need to save them before they're applied
+    

@@ -3,11 +3,12 @@ from maya import OpenMayaUI, OpenMaya
 from PySide2 import QtWidgets, QtCore, QtGui
 from shiboken2 import wrapInstance
 import os
-import weakref
 import json
 import RiggingTools
 import UndoStack
+import RiggingToolsOptions as Options
 reload(RiggingTools)
+reload(Options)
 
 
 def check_curves_directory(path):
@@ -17,45 +18,26 @@ def check_curves_directory(path):
 
 def dock_window(dialog_class):
     try:
-        pm.deleteUI(dialog_class.CONTROL_NAME)
+        pm.deleteUI("RiggingTools")
     except RuntimeError:
         pass
+    main_control = pm.workspaceControl("RiggingTools", ttc=["AttributeEditor", -1], iw=300, mw=300,
+                                       wp='resizingfree', label="RiggingTools")
 
-    main_control = pm.workspaceControl(dialog_class.CONTROL_NAME, ttc=["AttributeEditor", -1], iw=300, mw=300,
-                                       wp='resizingfree', label=dialog_class.DOCK_LABEL_NAME)
-
-    control_widget = OpenMayaUI.MQtUtil.findControl(dialog_class.CONTROL_NAME)
+    control_widget = OpenMayaUI.MQtUtil.findControl("RiggingTools")
     control_wrap = wrapInstance(long(control_widget), QtWidgets.QWidget)
-    control_wrap.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-    win = dialog_class(control_wrap)
     pm.evalDeferred(lambda *args: pm.workspaceControl(main_control, e=True, rs=True))
-    return win.run()
-
-
-def delete_instances():
-    for ins in RiggingToolsUI.instances:
-        try:
-            ins.setParent(None)
-            ins.deleteLater()
-        except RuntimeError:
-            pass
-
-        RiggingToolsUI.instances.remove(ins)
-        del ins
+    control_wrap.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+    return dialog_class(control_wrap)
 
 
 # noinspection PyAttributeOutsideInit
 class RiggingToolsUI(QtWidgets.QWidget):
 
-    instances = list()
-    CONTROL_NAME = 'RiggingTools'
-    DOCK_LABEL_NAME = 'RiggingTools'
-
     def __init__(self, parent=None):
         super(RiggingToolsUI, self).__init__(parent)
+        self.CONTROL_NAME = 'RiggingTools'
         self.curveCreator = RiggingTools.CurveCreator(self)
-        delete_instances()
-        self.__class__.instances.append(weakref.proxy(self))
         self.setWindowTitle('Rigging Tools')
 
         self.ui = parent
@@ -80,11 +62,40 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.build_options_ui()
         self.ctrlListWidget.load_curves()
 
-        self.tabWidget.setCurrentIndex(1)
+        self.tabWidget.setCurrentIndex(2)
 
     def build_options_ui(self):
-        self.Options = QtWidgets.QWidget()
-        self.tabWidget.addTab(self.Options, "Options")
+        self.options = QtWidgets.QWidget()
+        self.tabWidget.addTab(self.options, "Options")
+        main_layout = QtWidgets.QVBoxLayout(self.options)
+
+        control_creator_group = QtWidgets.QGroupBox("Control Creator")
+        control_creator_group.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        main_layout.addWidget(control_creator_group)
+        control_creator_layout = QtWidgets.QFormLayout()
+        control_creator_layout.setLabelAlignment(QtCore.Qt.AlignLeft)
+        control_creator_group.setLayout(control_creator_layout)
+
+        self.ctrl_suffix = QtWidgets.QLineEdit(Options.read_config(self.path, "ControlCreator", "ctrl_suffix"),
+                                               alignment=QtCore.Qt.AlignRight)
+        control_creator_layout.addRow(QtWidgets.QLabel("Control Suffix: "), self.ctrl_suffix)
+
+        self.grp_suffix = QtWidgets.QLineEdit(Options.read_config(self.path, "ControlCreator", "grp_suffix"),
+                                              alignment=QtCore.Qt.AlignRight)
+        control_creator_layout.addRow(QtWidgets.QLabel("Group Suffix: "), self.grp_suffix)
+
+        command_group = QtWidgets.QGroupBox("Commands")
+        main_layout.addWidget(command_group)
+        command_layout = QtWidgets.QFormLayout(command_group)
+
+        save_btn = QtWidgets.QPushButton("Save")
+        save_btn.clicked.connect(self.save_config)
+        main_layout.addWidget(save_btn)
+
+    def save_config(self):
+        Options.debug_write_config(self.path, "ControlCreator", "Mode", self.modeBox.currentIndex())
+        Options.debug_write_config(self.path, "ControlCreator", "Ctrl_Suffix", self.ctrl_suffix.text())
+        Options.debug_write_config(self.path, "ControlCreator", "Grp_Suffix", self.grp_suffix.text())
 
     def build_command_ui(self):
         self.Commands = QtWidgets.QWidget()
@@ -106,6 +117,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.modeBox = QtWidgets.QComboBox()
         self.modeBox.addItem("Bare Curve")
         self.modeBox.addItem("Grouped")
+        self.modeBox.setCurrentIndex(int(Options.read_config(self.path, "ControlCreator", "Mode")))
         self.ccGrid.addWidget(self.modeBox, 0, 3, 1, 1)
 
         self.ccGrid.addWidget(self.ctrlListWidget, 1, 0, 1, 4)
@@ -148,9 +160,6 @@ class RiggingToolsUI(QtWidgets.QWidget):
             else:
                 self.curveCreator.save_curve(text)
                 self.ctrlListWidget.load_curves()
-
-    def run(self):
-        return self
 
 
 class CtrlListWidget(QtWidgets.QListWidget):
@@ -205,10 +214,12 @@ class CtrlListWidget(QtWidgets.QListWidget):
         os.rename(icon, new_icon)
         os.rename(old_json, new_json)
         with open(new_json, "r+") as f:
-            ss = json.load(f)
-            ss[-1]["icon"] = new_icon
+            data = json.load(f)
+            data[-1]["icon"] = new_icon
+            data[-1]["name"] = new_name
+            data[-1]["path"] = new_json
         with open(new_json, "w+") as f:
-            json.dump(ss, f, indent=4)
+            json.dump(data, f, indent=4)
         self.load_curves()
 
     def load_curves(self):

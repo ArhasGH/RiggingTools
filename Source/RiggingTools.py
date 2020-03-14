@@ -3,6 +3,7 @@ import UndoStack
 import json
 import os
 from PySide2 import QtWidgets
+import RiggingToolsOptions as Options
 
 
 class CurveCreator(object):
@@ -55,6 +56,8 @@ class CurveCreator(object):
     def create_curve(self, control, name, mode):
         with UndoStack.UndoStack("Load Curve"):
             crvs = []
+            ctrl_suffix = Options.read_config(self.path, "ControlCreator", "ctrl_suffix")
+            grp_suffix = Options.read_config(self.path, "ControlCreator", "grp_suffix")
             with open("{}/{}.json".format(self.path, control), "r+") as f:
                 data_list = json.load(f)
                 for i in data_list[0:-1]:
@@ -63,17 +66,17 @@ class CurveCreator(object):
                 for crv in crvs[1:]:
                     pm.parent(crv, crvs[0].getParent(), add=True, s=True)
                     if name:
-                        curve = pm.rename(crvs[0].getParent(), name)
+                        curve = pm.rename(crvs[0].getParent(), name + ctrl_suffix)
                     else:
                         curve = crvs[0].getParent()
                     pm.delete(crv.getParent())
             else:
                 if name:
-                    curve = pm.rename(crvs[0].getParent(), name)
+                    curve = pm.rename(crvs[0].getParent(), name + ctrl_suffix)
                 else:
                     curve = crvs[0].getParent()
             if mode == 1:
-                pm.group(curve)
+                pm.group(curve, n=name+grp_suffix)
 
     def save_icon(self, name, curve):
         old_width = []
