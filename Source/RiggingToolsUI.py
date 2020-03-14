@@ -53,7 +53,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super(RiggingToolsUI, self).__init__(parent)
-        self.curveCreator = RiggingTools.CurveCreator()
+        self.curveCreator = RiggingTools.CurveCreator(self)
         delete_instances()
         self.__class__.instances.append(weakref.proxy(self))
         self.setWindowTitle('Rigging Tools')
@@ -187,7 +187,6 @@ class CtrlListWidget(QtWidgets.QListWidget):
         if action == rename_action:
             self.rename_control()
 
-    # Very Messy, rewrite later
     def rename_control(self):
         data = self.currentItem().data(QtCore.Qt.UserRole)
         new_name, confirm = self.popup.getText(self, "Rename", "New Name: ")
@@ -196,12 +195,15 @@ class CtrlListWidget(QtWidgets.QListWidget):
         elif not new_name:
             OpenMaya.MGlobal.displayError("Enter a new name!")
             return
+
         icon = data["icon"]
-        old_name = os.path.splitext(data["name"])[0]
+        old_name = data["name"]
+        old_json = data["path"]
         new_icon = icon.replace(old_name, new_name)
-        new_json = new_icon.replace(".jpg", ".json")
+        new_json = old_json.replace(old_name, new_name)
+
         os.rename(icon, new_icon)
-        os.rename(icon.replace(".jpg", ".json"), new_json)
+        os.rename(old_json, new_json)
         with open(new_json, "r+") as f:
             ss = json.load(f)
             ss[-1]["icon"] = new_icon
@@ -221,7 +223,6 @@ class CtrlListWidget(QtWidgets.QListWidget):
                     except ValueError:
                         continue
                 data_found = True
-                info["name"] = i
                 ss = info["icon"]
                 icon = QtGui.QIcon(ss)
                 item.setIcon(icon)

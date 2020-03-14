@@ -2,19 +2,29 @@ import pymel.core as pm
 import UndoStack
 import json
 import os
+from PySide2 import QtWidgets
 
 
 class CurveCreator(object):
 
-    def __init__(self):
+    def __init__(self, ui):
         super(CurveCreator, self).__init__()
         self.path = os.path.join(pm.internalVar(userAppDir=True), pm.about(v=True), "scripts/RiggingTools/Controls")
+        self.ui = ui
 
     def save_curve(self, name):
+        popup = QtWidgets.QMessageBox()
         sel = pm.ls(sl=1)[0]
         shapes = sel.getShapes()
+        path = "{}/{}.json".format(self.path, name)
+        if os.path.exists(path):
+            confirm = popup.warning(self.ui, "Warning", "Name already in use, Overwrite?",
+                                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+            if confirm == QtWidgets.QMessageBox.No:
+                return
         icon = self.save_icon(name, sel)
-        with open("{}/{}.json".format(self.path, name), "w+") as f:
+        print "owo"
+        with open(path, "w+") as f:
             dump_list = []
             info = {}
             for i, shape in enumerate(shapes):
@@ -37,8 +47,9 @@ class CurveCreator(object):
                 dump_list.append(dict(info))
             info.clear()
             info["icon"] = icon
+            info["path"] = icon.replace(".jpg", ".json")
+            info["name"] = name
             dump_list.append(info)
-            print dump_list
             json.dump(dump_list, f, indent=4)
 
     def create_curve(self, control, name, mode):
