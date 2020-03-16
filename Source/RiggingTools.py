@@ -4,6 +4,31 @@ import json
 import os
 from PySide2 import QtWidgets
 import RiggingToolsOptions as Options
+from maya import OpenMaya
+
+
+class RiggingCommands(object):
+
+    def __init__(self):
+        super(RiggingCommands, self).__init__()
+
+    @staticmethod
+    def change_color(color):
+        with UndoStack.UndoStack("Set Curve Color"):
+            curves = pm.ls(sl=1)
+            if not curves:
+                OpenMaya.MGlobal.displayError("Nothing selected")
+                return
+            for curve in curves:
+                try:
+                    shapes = curve.getShapes()
+                    if curve.getShape().type() != "nurbsCurve":
+                        raise RuntimeError
+                except RuntimeError:
+                    OpenMaya.MGlobal.displayError("Selection not of type nurbsCurve")
+                for shape in shapes:
+                    shape.overrideEnabled.set(1)
+                    shape.overrideColor.set(color)
 
 
 class CurveCreator(object):

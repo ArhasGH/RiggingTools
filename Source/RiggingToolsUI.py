@@ -7,6 +7,7 @@ import json
 import RiggingTools
 import UndoStack
 import RiggingToolsOptions as Options
+from functools import partial
 reload(RiggingTools)
 reload(Options)
 
@@ -36,8 +37,8 @@ class RiggingToolsUI(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super(RiggingToolsUI, self).__init__(parent)
-        self.CONTROL_NAME = 'RiggingTools'
         self.curveCreator = RiggingTools.CurveCreator(self)
+        self.Commands = RiggingTools.RiggingCommands()
         self.setWindowTitle('Rigging Tools')
 
         self.ui = parent
@@ -52,6 +53,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.popup = QtWidgets.QInputDialog()
 
     def build_ui(self):
+        self.setContentsMargins(0, 0, 0, 0)
         self.mainLayout.setContentsMargins(0, 0, 0, 0)
         self.tabWidget = QtWidgets.QTabWidget()
         self.tabWidget.setTabPosition(QtWidgets.QTabWidget.West)
@@ -61,8 +63,6 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.build_control_ui()
         self.build_options_ui()
         self.ctrlListWidget.load_curves()
-
-        self.tabWidget.setCurrentIndex(2)
 
     def build_options_ui(self):
         self.options = QtWidgets.QWidget()
@@ -98,10 +98,12 @@ class RiggingToolsUI(QtWidgets.QWidget):
         Options.debug_write_config(self.path, "ControlCreator", "Grp_Suffix", self.grp_suffix.text())
 
     def build_command_ui(self):
-        self.Commands = QtWidgets.QWidget()
-        self.tabWidget.addTab(self.Commands, "Commands")
+        commands_widget = QtWidgets.QWidget()
+        self.tabWidget.addTab(commands_widget, "Commands")
+        self.cmndLayout = QtWidgets.QGridLayout(commands_widget)
+        self.colorList = ColorList(self.Commands)
+        self.cmndLayout.addWidget(self.colorList)
 
-    # noinspection SpellCheckingInspection
     def build_control_ui(self):
         self.ControlCreator = QtWidgets.QWidget()
         self.tabWidget.addTab(self.ControlCreator, "Control Creator")
@@ -160,6 +162,52 @@ class RiggingToolsUI(QtWidgets.QWidget):
             else:
                 self.curveCreator.save_curve(text)
                 self.ctrlListWidget.load_curves()
+
+
+class ColorList(QtWidgets.QGroupBox):
+
+    def __init__(self, commands):
+        QtWidgets.QGroupBox.__init__(self)
+        self.commands = commands
+        self.setStyleSheet("QGroupBox {border: 0px}")
+        self.setContentsMargins(0, 0, 0, 0)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        self.main_layout = QtWidgets.QGridLayout(self)
+        self.main_layout.setSpacing(0)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.create_btn()
+        print self.main_layout.itemAt(4)
+
+    def create_btn(self):
+        colordict = {
+            0: [97.0, 97.0, 97.0], 1: [255.0, 255.0, 255.0], 2: [64.0, 64.0, 64.0],
+            3: [153.0, 153.0, 153.0], 4: [155.0, 0.0, 40.0], 5: [0.0, 4.0, 96.0],
+            6: [0.0, 0.0, 255.0], 7: [0.0, 70.0, 25.0], 8: [38.0, 0.0, 67.0],
+            9: [200.0, 0.0, 200.0], 10: [138.0, 72.0, 51.0], 11: [63.0, 35.0, 31.0],
+            12: [153.0, 38.0, 0.0], 13: [255.0, 0.0, 0.0], 14: [0.0, 255.0, 0.0],
+            15: [0.0, 65.0, 153.0], 16: [255.0, 255.0, 255.0], 17: [255.0, 255.0, 0.0],
+            18: [100.0, 220.0, 255.0], 19: [67.0, 255.0, 163.0], 20: [255.0, 176.0, 176.0],
+            21: [228.0, 172.0, 121.0], 22: [255.0, 255.0, 99.0], 23: [0.0, 153.0, 84.0],
+            24: [161.0, 106.0, 48.0], 25: [158.0, 161.0, 48.0], 26: [104.0, 161.0, 48.0],
+            27: [48.0, 161.0, 93.0], 28: [48.0, 161.0, 161.0], 29: [48.0, 103.0, 161.0],
+            30: [111.0, 48.0, 161.0], 31: [161.0, 48.0, 106.0]
+        }
+        x = 0
+        y = 0
+        for i in colordict:
+            if i == 0:
+                name = "None"
+            else:
+                name = ""
+            btn = QtWidgets.QPushButton(name)
+            color = "QPushButton {background-color: rgb(%s)}" % str(colordict[i]).strip("[]")
+            btn.setStyleSheet(color)
+            btn.clicked.connect(partial(self.commands.change_color, i))
+            if x > 7:
+                x = 0
+                y += 1
+            self.main_layout.addWidget(btn, y, x)
+            x += 1
 
 
 class CtrlListWidget(QtWidgets.QListWidget):
