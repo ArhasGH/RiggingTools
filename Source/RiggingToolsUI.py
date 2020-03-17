@@ -17,7 +17,7 @@ def check_curves_directory(path):
         os.mkdir(path)
 
 
-def dock_window(dialog_class):
+def dock_window(dialog_class, window):
     try:
         pm.deleteUI("RiggingTools")
     except RuntimeError:
@@ -29,16 +29,19 @@ def dock_window(dialog_class):
     control_wrap = wrapInstance(long(control_widget), QtWidgets.QWidget)
     pm.evalDeferred(lambda *args: pm.workspaceControl(main_control, e=True, rs=True))
     control_wrap.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-    return dialog_class(control_wrap)
+    return dialog_class(control_wrap, window)
 
 
 # noinspection PyAttributeOutsideInit
 class RiggingToolsUI(QtWidgets.QWidget):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, window=0):
         super(RiggingToolsUI, self).__init__(parent)
+        Options.read_config()
+        if not window:
+            window = 0
+        self.window = window
         self.curveCreator = RiggingTools.CurveCreator(self)
-        self.Commands = RiggingTools.RiggingCommands()
         self.setWindowTitle('Rigging Tools')
 
         self.ui = parent
@@ -51,6 +54,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
         check_curves_directory(self.path)
         self.build_ui()
         self.popup = QtWidgets.QInputDialog()
+        self.Commands = RiggingTools.RiggingCommands(self)
 
     def build_ui(self):
         self.setContentsMargins(0, 0, 0, 0)
@@ -63,6 +67,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.build_control_ui()
         self.build_options_ui()
         self.ctrlListWidget.load_curves()
+        self.tabWidget.setCurrentIndex(self.window)
 
     def build_options_ui(self):
         self.options = QtWidgets.QWidget()
@@ -76,32 +81,58 @@ class RiggingToolsUI(QtWidgets.QWidget):
         control_creator_layout.setLabelAlignment(QtCore.Qt.AlignLeft)
         control_creator_group.setLayout(control_creator_layout)
 
-        self.ctrl_suffix = QtWidgets.QLineEdit(Options.read_config(self.path, "ControlCreator", "ctrl_suffix"),
+        self.ctrl_suffix = QtWidgets.QLineEdit(Options.config_dict["ControlCreator"]["ctrl_suffix"],
                                                alignment=QtCore.Qt.AlignRight)
         control_creator_layout.addRow(QtWidgets.QLabel("Control Suffix: "), self.ctrl_suffix)
 
-        self.grp_suffix = QtWidgets.QLineEdit(Options.read_config(self.path, "ControlCreator", "grp_suffix"),
+        self.grp_suffix = QtWidgets.QLineEdit(Options.config_dict["ControlCreator"]["grp_suffix"],
                                               alignment=QtCore.Qt.AlignRight)
         control_creator_layout.addRow(QtWidgets.QLabel("Group Suffix: "), self.grp_suffix)
 
         command_group = QtWidgets.QGroupBox("Commands")
         main_layout.addWidget(command_group)
-        command_layout = QtWidgets.QFormLayout(command_group)
+        command_layout = QtWidgets.QVBoxLayout(command_group)
+
+        constraint_group = QtWidgets.QGroupBox("Constraint")
+        constraint_group.setStyle(QtWidgets.QStyleFactory.create("plastique"))
+        constraint_group.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        command_layout.addWidget(constraint_group)
+        command_layout.addItem(QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Minimum,
+                                                     QtWidgets.QSizePolicy.Expanding))
+
+        constraint_layout = QtWidgets.QHBoxLayout(constraint_group)
+        constraint_lbl = QtWidgets.QLabel("Constraint Type")
+        constraint_layout.addWidget(constraint_lbl)
+        self.constraint_box = QtWidgets.QComboBox()
+        self.constraint_box.addItems(["Offset Parent Matrix", "Parent Constraint"])
+        self.constraint_box.setCurrentIndex(int(Options.config_dict["Commands"]["constraint_type"]))
+        constraint_layout.addWidget(self.constraint_box)
 
         save_btn = QtWidgets.QPushButton("Save")
         save_btn.clicked.connect(self.save_config)
         main_layout.addWidget(save_btn)
 
     def save_config(self):
-        Options.debug_write_config(self.path, "ControlCreator", "Mode", self.modeBox.currentIndex())
-        Options.debug_write_config(self.path, "ControlCreator", "Ctrl_Suffix", self.ctrl_suffix.text())
-        Options.debug_write_config(self.path, "ControlCreator", "Grp_Suffix", self.grp_suffix.text())
+        Options.debug_write_config("ControlCreator", "Mode", self.modeBox.currentIndex())
+        Options.debug_write_config("ControlCreator", "Ctrl_Suffix", self.ctrl_suffix.text())
+        Options.debug_write_config("ControlCreator", "Grp_Suffix", self.grp_suffix.text())
+        Options.debug_write_config("Commands", "constraint_type", self.constraint_box.currentIndex())
+        OpenMaya.MGlobal.displayInfo("Successfully Saved")
 
     def build_command_ui(self):
         commands_widget = QtWidgets.QWidget()
         self.tabWidget.addTab(commands_widget, "Commands")
         self.cmndLayout = QtWidgets.QGridLayout(commands_widget)
-        self.colorList = ColorList(self.Commands)
+
+        self.copy_trans_grp = CopyGroup()
+        self.cmndLayout.addWidget(self.copy_trans_grp)
+
+        self.constraint_grp = ConstraintGroup()
+        self.cmndLayout.addWidget(self.constraint_grp)
+
+        self.cmndLayout.addItem(QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Minimum,
+                                                      QtWidgets.QSizePolicy.Expanding))
+        self.colorList = ColorList()
         self.cmndLayout.addWidget(self.colorList)
 
     def build_control_ui(self):
@@ -119,7 +150,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.modeBox = QtWidgets.QComboBox()
         self.modeBox.addItem("Bare Curve")
         self.modeBox.addItem("Grouped")
-        self.modeBox.setCurrentIndex(int(Options.read_config(self.path, "ControlCreator", "Mode")))
+        self.modeBox.setCurrentIndex(int(Options.config_dict["ControlCreator"]["mode"]))
         self.ccGrid.addWidget(self.modeBox, 0, 3, 1, 1)
 
         self.ccGrid.addWidget(self.ctrlListWidget, 1, 0, 1, 4)
@@ -164,21 +195,82 @@ class RiggingToolsUI(QtWidgets.QWidget):
                 self.ctrlListWidget.load_curves()
 
 
-class ColorList(QtWidgets.QGroupBox):
+class GroupBox(QtWidgets.QGroupBox):
 
-    def __init__(self, commands):
-        QtWidgets.QGroupBox.__init__(self)
-        self.commands = commands
+    def __init__(self):
+        super(GroupBox, self).__init__()
         self.setStyleSheet("QGroupBox {border: 0px}")
         self.setContentsMargins(0, 0, 0, 0)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
+
+
+class ConstraintGroup(GroupBox):
+
+    def __init__(self):
+        super(ConstraintGroup, self).__init__()
+        mode = int(Options.config_dict["Commands"]["constraint_type"])
+        layout = QtWidgets.QGridLayout(self)
+
+        constraint_btn = QtWidgets.QPushButton("Parent Constraint")
+        if mode == 1:
+            mo_radio = QtWidgets.QRadioButton("Maintain Offset")
+            mo_radio.setChecked(True)
+            layout.addWidget(mo_radio)
+
+            dmo_radio = QtWidgets.QRadioButton("Don't Maintain Offset")
+            layout.addWidget(dmo_radio, 0, 1)
+
+            constraint_btn.clicked.connect(lambda: RiggingTools.parent_constraint(mo=mo_radio.isChecked()))
+
+        else:
+            matrix_radio = QtWidgets.QRadioButton("Local Matrix")
+            matrix_radio.setChecked(True)
+            layout.addWidget(matrix_radio)
+
+            w_matrix_radio = QtWidgets.QRadioButton("World Matrix")
+            layout.addWidget(w_matrix_radio, 0, 1)
+
+            constraint_btn.clicked.connect(lambda:
+                                           RiggingTools.parent_constraint(world_matrix=w_matrix_radio.isChecked()))
+
+        layout.addWidget(constraint_btn, 1, 0, 1, 2)
+
+
+class CopyGroup(GroupBox):
+
+    def __init__(self):
+        super(CopyGroup, self).__init__()
+
+        layout = QtWidgets.QGridLayout(self)
+
+        matrix_radio = QtWidgets.QRadioButton("Object Matrix")
+        matrix_radio.setChecked(True)
+        layout.addWidget(matrix_radio)
+
+        pivot_radio = QtWidgets.QRadioButton("Object Pivot")
+        layout.addWidget(pivot_radio, 0, 1)
+
+        transform_btn = QtWidgets.QPushButton("Copy Transform")
+        transform_btn.clicked.connect(lambda: RiggingTools.copy_transform(1, matrix_radio.isChecked()))
+        layout.addWidget(transform_btn)
+
+        rotate_btn = QtWidgets.QPushButton("Copy Rotation")
+        rotate_btn.clicked.connect(lambda: RiggingTools.copy_transform(2, matrix_radio.isChecked()))
+        layout.addWidget(rotate_btn)
+
+        copy_btn = QtWidgets.QPushButton("Copy Transform && Rotation")
+        copy_btn.clicked.connect(lambda: RiggingTools.copy_transform(0, matrix_radio.isChecked()))
+        layout.addWidget(copy_btn, 2, 0, 1, 2)
+
+
+class ColorList(GroupBox):
+
+    def __init__(self):
+        super(ColorList, self).__init__()
         self.main_layout = QtWidgets.QGridLayout(self)
         self.main_layout.setSpacing(0)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
-        self.create_btn()
-        print self.main_layout.itemAt(4)
 
-    def create_btn(self):
         colordict = {
             0: [97.0, 97.0, 97.0], 1: [255.0, 255.0, 255.0], 2: [64.0, 64.0, 64.0],
             3: [153.0, 153.0, 153.0], 4: [155.0, 0.0, 40.0], 5: [0.0, 4.0, 96.0],
@@ -202,7 +294,7 @@ class ColorList(QtWidgets.QGroupBox):
             btn = QtWidgets.QPushButton(name)
             color = "QPushButton {background-color: rgb(%s)}" % str(colordict[i]).strip("[]")
             btn.setStyleSheet(color)
-            btn.clicked.connect(partial(self.commands.change_color, i))
+            btn.clicked.connect(partial(RiggingTools.change_color, i))
             if x > 7:
                 x = 0
                 y += 1
@@ -315,6 +407,6 @@ class CtrlListWidget(QtWidgets.QListWidget):
         return False
 
 
-def show_ui():
-    ui = dock_window(RiggingToolsUI)
+def show_ui(window=0):
+    ui = dock_window(RiggingToolsUI, window)
     return ui

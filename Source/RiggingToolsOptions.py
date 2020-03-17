@@ -1,15 +1,22 @@
 import ConfigParser
+import os
+import pymel.core as pm
 config = ConfigParser.ConfigParser()
 
 
-def read_config(path, section, option):
-    path = path.replace("Controls", "config.ini")
+config_dict = {}
+path = os.path.join(pm.internalVar(userAppDir=True), pm.about(v=True), "scripts/RiggingTools/config.ini")
+
+
+def read_config():
     config.read(path)
-    return config.get(section, option)
+    for section in config.sections():
+        config_dict[section] = {}
+        for option in config.options(section):
+            config_dict[section][option] = config.get(section, option)
 
 
-def debug_write_config(path, section, option, value):
-    path = path.replace("Controls", "config.ini")
+def debug_write_config(section, option, value):
     try:
         config.add_section(section)
     except ConfigParser.DuplicateSectionError:
@@ -20,8 +27,7 @@ def debug_write_config(path, section, option, value):
         config.write(f)
 
 
-def write_config(path, section, option, value):
-    path = path.replace("Controls", "config.ini")
+def write_config(section, option, value):
     config.set(section, option, value)
     with open(path, "w") as f:
         config.write(f)

@@ -9,26 +9,86 @@ from maya import OpenMaya
 
 class RiggingCommands(object):
 
-    def __init__(self):
+    def __init__(self, ui):
         super(RiggingCommands, self).__init__()
+        self.ui = ui
 
-    @staticmethod
-    def change_color(color):
-        with UndoStack.UndoStack("Set Curve Color"):
-            curves = pm.ls(sl=1)
-            if not curves:
-                OpenMaya.MGlobal.displayError("Nothing selected")
-                return
-            for curve in curves:
-                try:
-                    shapes = curve.getShapes()
-                    if curve.getShape().type() != "nurbsCurve":
-                        raise RuntimeError
-                except RuntimeError:
-                    OpenMaya.MGlobal.displayError("Selection not of type nurbsCurve")
-                for shape in shapes:
-                    shape.overrideEnabled.set(1)
-                    shape.overrideColor.set(color)
+
+def copy_transform(mode, matrix):
+    with UndoStack.UndoStack("Copy Transform/Rotate"):
+        sel = pm.ls(sl=1)
+        if not sel:
+            OpenMaya.MGlobal.displayWarning("Nothing selected")
+            return
+        elif len(sel) != 2:
+            OpenMaya.MGlobal.displayWarning("Select 2 objects")
+            return
+        source = sel[0]
+        target = sel[1]
+
+        def translate():
+            if matrix:
+                origin_pos = source.worldMatrix.translate.get()
+            else:
+                origin_pos = source.getRotatePivot(4)
+            target.worldMatrix.translate.set(origin_pos)
+
+        def rotate():
+            target.worldMatrix.rotate.set(source.worldMatrix.rotate.get())
+
+        if mode == 0:
+            translate()
+            rotate()
+        elif mode == 1:
+            translate()
+        else:
+            rotate()
+
+
+def change_color(color):
+    with UndoStack.UndoStack("Set Curve Color"):
+        curves = pm.ls(sl=1)
+        if not curves:
+            OpenMaya.MGlobal.displayWarning("Nothing selected")
+            return
+        for curve in curves:
+            try:
+                shapes = curve.getShapes()
+                if curve.getShape().type() != "nurbsCurve":
+                    raise RuntimeError
+            except RuntimeError:
+                OpenMaya.MGlobal.displayWarning("Selection not of type nurbsCurve")
+            for shape in shapes:
+                shape.overrideEnabled.set(1)
+                shape.overrideColor.set(color)
+
+
+def parent_constraint(mo=True, world_matrix=False):
+    with UndoStack.UndoStack("Parent Constraint"):
+        mode = int(Options.config_dict["Commands"]["constraint_type"])
+        sel = pm.ls(sl=1)
+        if not sel:
+            OpenMaya.MGlobal.displayWarning("Nothing selected")
+            return
+        elif len(sel) < 2:
+            OpenMaya.MGlobal.displayWarning("Select at least 2 objects")
+            return
+
+        if mode == 1:
+            pm.parentConstraint(sel[0:-1], sel[-1], mo=mo)
+        else:
+            if not world_matrix:
+                attr = "matrix"
+            else:
+                attr = "worldMatrix"
+            blend = pm.createNode("blendMatrix", n=sel[-1] + 'BlendMatrix')
+            for i, n in enumerate(sel[0:-1]):
+                if i == 0:
+                    n.attr(attr).connect(blend.inputMatrix)
+                else:
+                    n.attr(attr).connect(blend.attr("target.target[{}].targetMatrix".format(i - 1)))
+                    blend.attr("target.target[{}].weight".format(i - 1)).set(1.0 / (i + 1))
+            blend.outputMatrix.connect(sel[-1].offsetParentMatrix)
 
 
 class CurveCreator(object):
@@ -49,7 +109,6 @@ class CurveCreator(object):
             if confirm == QtWidgets.QMessageBox.No:
                 return
         icon = self.save_icon(name, sel)
-        print "owo"
         with open(path, "w+") as f:
             dump_list = []
             info = {}
@@ -81,8 +140,8 @@ class CurveCreator(object):
     def create_curve(self, control, name, mode):
         with UndoStack.UndoStack("Load Curve"):
             crvs = []
-            ctrl_suffix = Options.read_config(self.path, "ControlCreator", "ctrl_suffix")
-            grp_suffix = Options.read_config(self.path, "ControlCreator", "grp_suffix")
+            ctrl_suffix = Options.config_dict["ControlCreator"]["ctrl_suffix"]
+            grp_suffix = Options.config_dict["ControlCreator"]["grp_suffix"]
             with open("{}/{}.json".format(self.path, control), "r+") as f:
                 data_list = json.load(f)
                 for i in data_list[0:-1]:
