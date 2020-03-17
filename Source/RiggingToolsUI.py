@@ -1,7 +1,7 @@
 import pymel.core as pm
-from maya import OpenMayaUI, OpenMaya
+from maya import OpenMaya
+from maya.app.general import mayaMixin
 from PySide2 import QtWidgets, QtCore, QtGui
-from shiboken2 import wrapInstance
 import os
 import json
 import RiggingTools
@@ -17,26 +17,12 @@ def check_curves_directory(path):
         os.mkdir(path)
 
 
-def dock_window(dialog_class, window):
-    try:
-        pm.deleteUI("RiggingTools")
-    except RuntimeError:
-        pass
-    main_control = pm.workspaceControl("RiggingTools", ttc=["AttributeEditor", -1], iw=300, mw=300,
-                                       wp='resizingfree', label="RiggingTools")
-
-    control_widget = OpenMayaUI.MQtUtil.findControl("RiggingTools")
-    control_wrap = wrapInstance(long(control_widget), QtWidgets.QWidget)
-    pm.evalDeferred(lambda *args: pm.workspaceControl(main_control, e=True, rs=True))
-    control_wrap.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-    return dialog_class(control_wrap, window)
-
-
 # noinspection PyAttributeOutsideInit
-class RiggingToolsUI(QtWidgets.QWidget):
+class RiggingToolsUI(mayaMixin.MayaQWidgetDockableMixin, QtWidgets.QWidget):
 
     def __init__(self, parent=None, window=0):
         super(RiggingToolsUI, self).__init__(parent)
+        self.setObjectName("RiggingTools")
         Options.read_config()
         if not window:
             window = 0
@@ -44,8 +30,7 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.curveCreator = RiggingTools.CurveCreator(self)
         self.setWindowTitle('Rigging Tools')
 
-        self.ui = parent
-        self.mainLayout = parent.layout()
+        self.mainLayout = QtWidgets.QVBoxLayout(self)
 
         self.path = os.path.join(pm.internalVar(userAppDir=True), pm.about(v=True), "scripts/RiggingTools/Controls")
         self.ctrlListWidget = CtrlListWidget(path=self.path)
@@ -55,6 +40,9 @@ class RiggingToolsUI(QtWidgets.QWidget):
         self.build_ui()
         self.popup = QtWidgets.QInputDialog()
         self.Commands = RiggingTools.RiggingCommands(self)
+
+    def dockCloseEventTriggered(self):
+        print "OwO"
 
     def build_ui(self):
         self.setContentsMargins(0, 0, 0, 0)
@@ -405,8 +393,3 @@ class CtrlListWidget(QtWidgets.QListWidget):
             font.setCapitalization(QtGui.QFont.Capitalize)
             self.setFont(font)
         return False
-
-
-def show_ui(window=0):
-    ui = dock_window(RiggingToolsUI, window)
-    return ui
