@@ -16,18 +16,12 @@ def read_config():
             config_dict[section][option] = config.get(section, option)
 
 
-def debug_write_config(section, option, value):
+def write_config(section, option, value):
     try:
         config.add_section(section)
     except ConfigParser.DuplicateSectionError:
         pass
 
-    config.set(section, option, value)
-    with open(path, "w") as f:
-        config.write(f)
-
-
-def write_config(section, option, value):
     config.set(section, option, value)
     with open(path, "w") as f:
         config.write(f)

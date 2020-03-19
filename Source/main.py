@@ -18,7 +18,7 @@ def DockableWidgetUIScript():
 
     customMixinWindow = RiggingToolsUI.RiggingToolsUI()
     customMixinWindow.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-    customMixinWindow.show(dockable=True)
+    customMixinWindow.show(dockable=True, w=0)
 
     return customMixinWindow
 

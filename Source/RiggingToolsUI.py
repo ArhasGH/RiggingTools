@@ -8,6 +8,7 @@ import RiggingTools
 import UndoStack
 import RiggingToolsOptions as Options
 from functools import partial
+
 reload(RiggingTools)
 reload(Options)
 
@@ -32,6 +33,7 @@ class RiggingToolsUI(mayaMixin.MayaQWidgetDockableMixin, QtWidgets.QWidget):
 
         self.mainLayout = QtWidgets.QVBoxLayout(self)
 
+        self.version = int(pm.about(v=True))
         self.path = os.path.join(pm.internalVar(userAppDir=True), pm.about(v=True), "scripts/RiggingTools/Controls")
         self.ctrlListWidget = CtrlListWidget(path=self.path)
         self.iconSize = self.ctrlListWidget.iconSize
@@ -39,7 +41,6 @@ class RiggingToolsUI(mayaMixin.MayaQWidgetDockableMixin, QtWidgets.QWidget):
         check_curves_directory(self.path)
         self.build_ui()
         self.popup = QtWidgets.QInputDialog()
-        self.Commands = RiggingTools.RiggingCommands(self)
 
     def dockCloseEventTriggered(self):
         print "OwO"
@@ -93,7 +94,11 @@ class RiggingToolsUI(mayaMixin.MayaQWidgetDockableMixin, QtWidgets.QWidget):
         constraint_layout.addWidget(constraint_lbl)
         self.constraint_box = QtWidgets.QComboBox()
         self.constraint_box.addItems(["Offset Parent Matrix", "Parent Constraint"])
-        self.constraint_box.setCurrentIndex(int(Options.config_dict["Commands"]["constraint_type"]))
+        if self.version < 2020:
+            self.constraint_box.setCurrentIndex(1)
+            constraint_group.setDisabled(True)
+        else:
+            self.constraint_box.setCurrentIndex(int(Options.config_dict["Commands"]["constraint_type"]))
         constraint_layout.addWidget(self.constraint_box)
 
         save_btn = QtWidgets.QPushButton("Save")
@@ -101,11 +106,12 @@ class RiggingToolsUI(mayaMixin.MayaQWidgetDockableMixin, QtWidgets.QWidget):
         main_layout.addWidget(save_btn)
 
     def save_config(self):
-        Options.debug_write_config("ControlCreator", "Mode", self.modeBox.currentIndex())
-        Options.debug_write_config("ControlCreator", "Ctrl_Suffix", self.ctrl_suffix.text())
-        Options.debug_write_config("ControlCreator", "Grp_Suffix", self.grp_suffix.text())
-        Options.debug_write_config("Commands", "constraint_type", self.constraint_box.currentIndex())
+        Options.write_config("ControlCreator", "Mode", self.modeBox.currentIndex())
+        Options.write_config("ControlCreator", "Ctrl_Suffix", self.ctrl_suffix.text())
+        Options.write_config("ControlCreator", "Grp_Suffix", self.grp_suffix.text())
+        Options.write_config("Commands", "constraint_type", self.constraint_box.currentIndex())
         OpenMaya.MGlobal.displayInfo("Successfully Saved")
+        self.constraint_grp.refresh()
 
     def build_command_ui(self):
         commands_widget = QtWidgets.QWidget()
@@ -115,7 +121,7 @@ class RiggingToolsUI(mayaMixin.MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self.copy_trans_grp = CopyGroup()
         self.cmndLayout.addWidget(self.copy_trans_grp)
 
-        self.constraint_grp = ConstraintGroup()
+        self.constraint_grp = ConstraintGroup(self.version)
         self.cmndLayout.addWidget(self.constraint_grp)
 
         self.cmndLayout.addItem(QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Minimum,
@@ -142,6 +148,7 @@ class RiggingToolsUI(mayaMixin.MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self.ccGrid.addWidget(self.modeBox, 0, 3, 1, 1)
 
         self.ccGrid.addWidget(self.ctrlListWidget, 1, 0, 1, 4)
+        self.ctrlListWidget.itemDoubleClicked.connect(self.create_curve)
 
         self.importBtn = QtWidgets.QPushButton("Create")
         self.importBtn.clicked.connect(self.create_curve)
@@ -194,34 +201,49 @@ class GroupBox(QtWidgets.QGroupBox):
 
 class ConstraintGroup(GroupBox):
 
-    def __init__(self):
+    def __init__(self, version):
         super(ConstraintGroup, self).__init__()
-        mode = int(Options.config_dict["Commands"]["constraint_type"])
-        layout = QtWidgets.QGridLayout(self)
+        self.version = version
+        self.layout = QtWidgets.QGridLayout(self)
+        self.mode = None
 
-        constraint_btn = QtWidgets.QPushButton("Parent Constraint")
-        if mode == 1:
+        self.constraint_btn = QtWidgets.QPushButton("Parent Constraint")
+        self.layout.addWidget(self.constraint_btn, 1, 0, 1, 2)
+        self.refresh()
+
+    def refresh(self):
+        try:
+            for i in reversed(range(1, 3)):
+                self.layout.itemAt(i).widget().deleteLater()
+        except AttributeError:
+            pass
+        if self.version < 2020:
+            self.mode = 1
+        else:
+            self.mode = int(Options.config_dict["Commands"]["constraint_type"])
+        self.create_radio()
+
+    def create_radio(self):
+        if self.mode == 1:
             mo_radio = QtWidgets.QRadioButton("Maintain Offset")
             mo_radio.setChecked(True)
-            layout.addWidget(mo_radio)
+            self.layout.addWidget(mo_radio, 0, 0)
 
             dmo_radio = QtWidgets.QRadioButton("Don't Maintain Offset")
-            layout.addWidget(dmo_radio, 0, 1)
+            self.layout.addWidget(dmo_radio, 0, 1)
 
-            constraint_btn.clicked.connect(lambda: RiggingTools.parent_constraint(mo=mo_radio.isChecked()))
+            self.constraint_btn.clicked.connect(lambda: RiggingTools.parent_constraint(mo=mo_radio.isChecked()))
 
         else:
             matrix_radio = QtWidgets.QRadioButton("Local Matrix")
             matrix_radio.setChecked(True)
-            layout.addWidget(matrix_radio)
+            self.layout.addWidget(matrix_radio, 0, 0)
 
             w_matrix_radio = QtWidgets.QRadioButton("World Matrix")
-            layout.addWidget(w_matrix_radio, 0, 1)
+            self.layout.addWidget(w_matrix_radio, 0, 1)
 
-            constraint_btn.clicked.connect(lambda:
-                                           RiggingTools.parent_constraint(world_matrix=w_matrix_radio.isChecked()))
-
-        layout.addWidget(constraint_btn, 1, 0, 1, 2)
+            self.constraint_btn.clicked.connect(lambda:
+                                                RiggingTools.parent_constraint(world_matrix=w_matrix_radio.isChecked()))
 
 
 class CopyGroup(GroupBox):

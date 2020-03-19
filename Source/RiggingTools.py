@@ -7,13 +7,6 @@ import RiggingToolsOptions as Options
 from maya import OpenMaya
 
 
-class RiggingCommands(object):
-
-    def __init__(self, ui):
-        super(RiggingCommands, self).__init__()
-        self.ui = ui
-
-
 def copy_transform(mode, matrix):
     with UndoStack.UndoStack("Copy Transform/Rotate"):
         sel = pm.ls(sl=1)
@@ -54,13 +47,14 @@ def change_color(color):
         for curve in curves:
             try:
                 shapes = curve.getShapes()
-                if curve.getShape().type() != "nurbsCurve":
+                if curve.getShape() is None or curve.getShape().type() != "nurbsCurve":
                     raise RuntimeError
             except RuntimeError:
                 OpenMaya.MGlobal.displayWarning("Selection not of type nurbsCurve")
             for shape in shapes:
                 shape.overrideEnabled.set(1)
                 shape.overrideColor.set(color)
+        OpenMaya.MGlobal.displayInfo("Curve color changed")
 
 
 def parent_constraint(mo=True, world_matrix=False):

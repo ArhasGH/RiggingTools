@@ -10,9 +10,8 @@ The script *should* be compatible with maya 2017+
 
 To run the script run this from the script editor or shelf
 ```python
-from RiggingTools.Source import RiggingToolsUI
-reload(RiggingToolsUI)
-ui = RiggingToolsUI.show_ui()
+from RiggingTools.Source import main
+main.show_ui()
 ```
 
 Current State:
