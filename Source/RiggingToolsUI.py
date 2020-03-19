@@ -212,6 +212,7 @@ class ConstraintGroup(GroupBox):
         self.refresh()
 
     def refresh(self):
+        Options.read_config()
         try:
             for i in reversed(range(1, 3)):
                 self.layout.itemAt(i).widget().deleteLater()

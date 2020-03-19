@@ -154,6 +154,8 @@ class CurveCreator(object):
                 else:
                     curve = crvs[0].getParent()
             if mode == 1:
+                if not name:
+                    name = curve
                 pm.group(curve, n=name+grp_suffix)
 
     def save_icon(self, name, curve):
